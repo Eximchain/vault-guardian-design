@@ -1,0 +1,82 @@
+{
+  "name": "node-vault",
+  "version": "0.9.5",
+  "description": "Javascript client for HashiCorp's Vault",
+  "main": "./src/index.js",
+  "scripts": {
+    "init": "node -r dotenv/config setup/init.js",
+    "okta": "node -r dotenv/config setup/01_okta.js",
+    "policy": "node -r dotenv/config setup/02_policies.js",
+    "login": "node -r dotenv/config setup/04_login.js",
+    "precoverage": "npm run lint",
+    "coverage": "istanbul cover --report text-summary node_modules/.bin/_mocha",
+    "lint": "eslint .",
+    "test": "mocha",
+    "test-unit": "mocha test/unit.js",
+    "test-watch": "mocha --watch",
+    "predocs": "node scripts/write-features.js",
+    "docs": "docco --output docs src/*.js",
+    "nsp": "nsp check",
+    "prepublish": "npm run nsp",
+    "precommit": "node scripts/write-features.js && git add features.md"
+  },
+  "directories": {
+    "example": "./example",
+    "doc": "./docs"
+  },
+  "files": [
+    "src"
+  ],
+  "dependencies": {
+    "debug": "3.1.0",
+    "mustache": "^2.2.1",
+    "request": "^2.83.0",
+    "request-promise-native": "^1.0.5",
+    "tv4": "^1.2.7"
+  },
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "dirty-chai": "^1.2.2",
+    "docco": "^0.7.0",
+    "eslint": "2.13.1",
+    "eslint-config-airbnb": "^9.0.1",
+    "eslint-plugin-import": "^1.11.1",
+    "eslint-plugin-jsx-a11y": "1.2.0",
+    "eslint-plugin-react": "^5.2.2",
+    "husky": "^0.14.3",
+    "istanbul": "^0.4.5",
+    "mocha": "2.4.5",
+    "nsp": "^2.6.3",
+    "sinon": "1.17.3",
+    "sinon-chai": "^2.8.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kr1sp1n/node-vault.git"
+  },
+  "keywords": [
+    "vault",
+    "hashicorp",
+    "secrets",
+    "manage",
+    "client"
+  ],
+  "author": "kr1sp1n <krispin@posteo.de> (https://github.com/kr1sp1n)",
+  "contributors": [
+    "Julian Amelung (https://github.com/julianbei)",
+    "Trevor Robinson (https://github.com/trevorr)",
+    "Tim Robinson (https://github.com/timjrobinson)",
+    "Adam Kelsall (https://github.com/adamkelsall)",
+    "Charles Phillips (https://github.com/doublerebel)",
+    "Karthik Kumar Viswanathan (https://github.com/guilt)",
+    "Mario Pareja (https://github.com/mpareja)",
+    "Saverio Proto (https://github.com/zioproto)",
+    "Tom Vogel (https://github.com/tavogel)",
+    "Jonathan Bastnagel (https://github.com/inkadnb)"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/kr1sp1n/node-vault/issues"
+  },
+  "homepage": "https://github.com/kr1sp1n/node-vault"
+}
