@@ -40,7 +40,7 @@ One angle here is to create a single plugin which handles everything: registerin
 ### Network Protocol
 A first time user's flow would look like:
 
-![Guardian Network Protocol](protocol-diagram.jpg | width=150)
+![Guardian Network Protocol](./protocol-diagram.jpg)
 
 1. User POSTs to the Vault plugin at `/guardian`, an unauthenticated endpoint, including their Okta username & password in the body.
 2. Plugin GETs the user from the Okta API at [`/api/v1/users/:username`](https://developer.okta.com/docs/api/resources/users#get-user-with-login), verifying they really exist in our installation.
@@ -53,6 +53,16 @@ A first time user's flow would look like:
 9. Plugin returns signature to user, key is never exposed.
 
 ### Policy Design
+In this strategy, there are only two policies required.  One privileged Guardian policy which the plugin can use itself, and a regular Enduser policy which all registered user accounts will be given.
+
+- Guardian Policy
+  - `/auth/okta/users/*: ['read','create']`
+  - `/auth/okta/login: [create]`
+  - `/secrets: ['read','create']`
+- Enduser Policy
+  - `/guardian/sign: ['create']`
+
+The lack of `'update'` permissions means the privileged policy will never overwrite anybody's keys.  They do not need to create new policies -- the sign path does not require a user argument, so the same policy can be given to all future users.
 
 ## Regular Signing User Story
 
