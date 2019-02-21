@@ -40,11 +40,7 @@ One angle here is to create a single plugin which handles everything: registerin
 ### Network Protocol
 A first time user's flow would look like:
 
-<<<<<<< HEAD
-![Guardian Network Protocol](./protocol-diagram.jpg)
-=======
 ![Guardian Network Protocol](protocol-diagram.jpg)
->>>>>>> 2c867bb05fc0046b922c124d2c1f812913198ef1
 
 1. User POSTs to the Vault plugin at `/guardian`, an unauthenticated endpoint, including their Okta username & password in the body.
 2. Plugin GETs the user from the Okta API at [`/api/v1/users/:username`](https://developer.okta.com/docs/api/resources/users#get-user-with-login), verifying they really exist in our installation.
