@@ -41,7 +41,7 @@ This strategy requires three policies:
   - Privileged policy for the plugin to use
   - `/auth/okta/users/*: ['read','create']`
   - `/auth/okta/login: [create]`
-  - `/secrets: ['read','create']`
+  - `/keys: ['read','create']`
 - **Enduser**
   - Regular policy for our registered endusers
   - `/guardian/sign: ['create']`
