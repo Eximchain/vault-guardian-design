@@ -1,41 +1,24 @@
 # okta-vault
 Software req'd to configure and use a Vault keystore behind Okta auth.  This is an integrated, batteries-included, authentication+authorization service for one `secp256k1` private key.
 
-> Under Construction: More details pending as docs are compiled
-
-- Principles:
-	- Keep fxnality minimal so it can slide into as many places as possible
-	- Provide a clean API for consuming clients
-	- Just focus on keeping keys safe and letting users sign (maybe verify?) with them
-
-- Found Issues:
-	- Vault open-source version only supports their built-in Okta Verify MFA, not Google etc.
-
-- Open Questions:
-	- A: Plugin manages a user's key and lets them sign.
-	- Q: What does plugin need to connect with?
-		- A: Make it an HTTPS microservice, slides into all platforms (mobile/desktop might need PopupRedirect solution)
-	- Q: What do the first three user types look like?
-		- A: Key variables: Funding? Technical Proficiency?  Individual or Organization?
-		- A: Two end-users: person who sets up service, person who signs with it
-		- A: Includes random people at hackathons who are just trying to make crypto apps.
-		- A: At least also support Google, as Okta is an enterprise solution.
-	- A: One instance, many users
-	- A: What are the first applications that are going to use this?
-		- Probably gonna be the wallet app so people don't need to directly load their private keys
-	- Q: Support multiple keys?  Maybe key regeneration?
-		- A: Nope, just one key.  See if the namespacing can allow for getting diff one without modifying first one
-
-- Security Concerns:
-	- Make sure to use HTTPS so attackers can't snoop the payload on its way to Vault
-	- Make sure the session is one-time-use so an open session can't be re-used by an attacker
-
-## Open Questions
-- Okta users must be explicitly registered to the Vault, separate from the login step.  Suppose we have the plugin call this register step -- the registration is just based on username.  How do we ensure they're not lying about the Okta username?  Not a real security issue if they can't login with that username, but could allow denial of service to the username's rightful owner.
-- Is the whole Plugin system fast enough (without being built into the vault binary) to handle every single request related to this? One benefit to a sign-up only plugin is that only "new user signup" requests would need to hit the plugin, and then the plugin would just dump secrets and credentials that the user would use (possibly through an app on a server we control) via other built-in engines
+> Principle: A minimal, clean API which keeps keys safe and lets consuming users sign with them.
 
 ## One Plugin Strategy
 One angle here is to create a single plugin which handles everything: registering users, creating keys, and signing with them.  
+
+### Endpoints
+- `/guardian`
+    - Unauthorized endpoint, accessible by all, only implements `create`.
+    - POST with Okta username & password; receive a single-use `client_token` for signing with a secure key tied to your account.
+    - Acts as an idempotent signup method.  If we don't have a record for that Okta user, it registers them, creates their key, and then logs them in.  If they've registered before, it just logs them in.  Either way, the response is a `client_token`.
+- `/guardian/sign`
+    - Authorized endpoint, only accessible when authenticated under the **Enduser** policy, only implements `create`.
+    - POST with the raw data you want signed, receive a signature using your key.
+    - *Optional*: Also respond with a `retry_token` which clients can provide in a subsequent sign calls, giving us a compromise between security (single-use token) and convenience (don't need to authenticate every time).
+- `/guardian/authorize`
+    - Authorized endpoint, only accessible when authenticated under the **Maintainer** policy, only implements `create`.
+    - Call with a `SecretId` for the `guardian` AppRole, allowing the plugin to get a token for the rest of its lifetime. The `SecretId` should be single-use, it should produce tokens which can be used forever.
+    - Needs to be called by a root owner when the plugin process begins.  This may just be on startup, but potentially later if the plugin crashes.
 
 ### Network Protocol
 A first time user's flow would look like:
@@ -43,8 +26,8 @@ A first time user's flow would look like:
 ![Guardian Network Protocol](protocol-diagram.jpg)
 
 1. User POSTs to the Vault plugin at `/guardian`, an unauthenticated endpoint, including their Okta username & password in the body.
-2. Plugin GETs the user from the Okta API at [`/api/v1/users/:username`](https://developer.okta.com/docs/api/resources/users#get-user-with-login), verifying they really exist in our installation.
-3. Plugin registers user with core Vault by POSTing to [`/auth/okta/users/:username`](https://www.vaultproject.io/api/auth/okta/index.html#register-user).  They are automatically given the `guardianUser` policy which gives them access to the `/guardian/sign` endpoint.
+2. Plugin GETs the user from the Okta API at [`/api/v1/users/:username`](https://developer.okta.com/docs/api/resources/users#get-user-with-login), verifying they really exist in our installation.  At this point, the plugin should also check to see if that user is already registered.
+3. Plugin registers user with core Vault by POSTing to [`/auth/okta/users/:username`](https://www.vaultproject.io/api/auth/okta/index.html#register-user).  They are automatically given the `Enduser` policy which gives them access to the `/guardian/sign` endpoint.
 4. Plugin creates a key for the user by POSTing to core Vault at [`/secret/:username`](https://www.vaultproject.io/api/secret/kv/kv-v1.html#create-update-secret).  Stores the mnemonic, HD_PATH, and raw file, just good measure.
 5. Plugin uses the earlier credentials to perform a login on behalf of the user, POSTing to core Vault at [`/auth/okta/login/:username`](https://www.vaultproject.io/api/auth/okta/index.html#login).  Core Vault handles checking those credentials against the Okta servers.
 6. Plugin returns the [client token](https://www.vaultproject.io/api/auth/okta/index.html#sample-response-5) to the user so they can make a sign call.
@@ -53,16 +36,33 @@ A first time user's flow would look like:
 9. Plugin returns signature to user, key is never exposed.
 
 ### Policy Design
-In this strategy, there are only two policies required.  One privileged Guardian policy which the plugin can use itself, and a regular Enduser policy which all registered user accounts will be given.
-
-- Guardian Policy
+This strategy requires three policies:
+- **Guardian**
+  - Privileged policy for the plugin to use
   - `/auth/okta/users/*: ['read','create']`
   - `/auth/okta/login: [create]`
   - `/secrets: ['read','create']`
-- Enduser Policy
+- **Enduser**
+  - Regular policy for our registered endusers
   - `/guardian/sign: ['create']`
+- **Maintainer**
+  - Highly privileged policy for re-authorizing Guardian
+  - `/auth/approle/role/guardian/secret-id: ['create']`
+  - `/guardian/authorize: ['create']`
 
 The lack of `'update'` permissions means the privileged policy will never overwrite anybody's keys.  They do not need to create new policies -- the sign path does not require a user argument, so the same policy can be given to all future users.
+
+### Initial Setup
+When Vault initializes with the root token, we need a setup script to mount engines, create policies, and assign them to identities.  Roughly, it will:
+1. Create an Okta configuration & enable the engine
+2. Write the **Guardian**, **Enduser**, and **Maintainer** policies
+3. Mount the Guardian plugin at `/guardian`
+4. Mount a secrets engine at `/keys`
+5. Register a trusted Okta username (Louis or Juan), give it the **Maintainer** policy.
+6. Create an AppRole named `guardian`, give it the **Guardian** policy.
+7. Update `guardian`'s RoleId to `guardian-role-id` -- hardcoding that value means we don't need to query it.
+8. Get a SecretId for `guardian`, pipe it into the `/guardian/authorize` command.
+9. Verify the plugin is operational by calling `/guardian` with new Okta credentials.  If the plugin is able to register the user and give you a `client_token`, its authorization is working.
 
 ## Regular Signing User Story
 
@@ -95,6 +95,22 @@ The lack of `'update'` permissions means the privileged policy will never overwr
 	3a. If key present, allow user to export key or seed
 	3b. If no key, create a key within the Vault and show the mnemonic to the user
 
+## Open Questions
+- Is the whole Plugin system fast enough (without being built into the vault binary) to handle every single request related to this? One benefit to a sign-up only plugin is that only "new user signup" requests would need to hit the plugin, and then the plugin would just dump secrets and credentials that the user would use (possibly through an app on a server we control) via other built-in engines
+
+## Answered Questions
+- Q: What does plugin need to connect with?
+    - A: Make it an HTTPS microservice, slides into all platforms (mobile/desktop might need PopupRedirect solution)
+- Q: What do the first three user types look like?
+    - A: Key variables: Funding? Technical Proficiency?  Individual or Organization?
+    - A: Two end-users: person who sets up service, person who signs with it
+    - A: Includes random people at hackathons who are just trying to make crypto apps.
+    - A: At least also support Google, as Okta is an enterprise solution.
+- A: One instance, many users
+- A: What are the first applications that are going to use this?
+    - Probably gonna be the wallet app so people don't need to directly load their private keys
+- Q: Support multiple keys?  Maybe key regeneration?
+    - A: Nope, just one key.  See if the namespacing can allow for getting diff one without modifying first one
 
 ## Enterprise Wishlist
 This documents ideas about features or strategies that we could incorporate if we use Vault Enterprise.  Those clusters are very expensive, though, so ideally we find workarounds such that we don't need these:
