@@ -28,11 +28,11 @@ A first time user's flow would look like:
 1. User POSTs to the Vault plugin at `/guardian`, an unauthenticated endpoint, including their Okta username & password in the body.
 2. Plugin GETs the user from the Okta API at [`/api/v1/users/:username`](https://developer.okta.com/docs/api/resources/users#get-user-with-login), verifying they really exist in our installation.  At this point, the plugin should also check to see if that user is already registered.
 3. Plugin registers user with core Vault by POSTing to [`/auth/okta/users/:username`](https://www.vaultproject.io/api/auth/okta/index.html#register-user).  They are automatically given the `Enduser` policy which gives them access to the `/guardian/sign` endpoint.
-4. Plugin creates a key for the user by POSTing to core Vault at [`/secret/:username`](https://www.vaultproject.io/api/secret/kv/kv-v1.html#create-update-secret).  Stores the mnemonic, HD_PATH, and raw file, just good measure.
+4. Plugin creates a key for the user by POSTing to core Vault at [`/keys/:username`](https://www.vaultproject.io/api/secret/kv/kv-v1.html#create-update-secret).  Stores the mnemonic, HD_PATH, and raw file, just good measure.
 5. Plugin uses the earlier credentials to perform a login on behalf of the user, POSTing to core Vault at [`/auth/okta/login/:username`](https://www.vaultproject.io/api/auth/okta/index.html#login).  Core Vault handles checking those credentials against the Okta servers.
 6. Plugin returns the [client token](https://www.vaultproject.io/api/auth/okta/index.html#sample-response-5) to the user so they can make a sign call.
 7. User POSTs to the Vault plugin at `/guardian/sign`, an authenticated endpoint, including their data to sign in the body.
-8. Plugin fetches key by GETing [`/secret/:username`](https://www.vaultproject.io/api/secret/kv/kv-v1.html#read-secret), unmarshalls it, and uses it with the provided data to produce a signature.
+8. Plugin fetches key by GETing [`/keys/:username`](https://www.vaultproject.io/api/secret/kv/kv-v1.html#read-secret), unmarshalls it, and uses it with the provided data to produce a signature.
 9. Plugin returns signature to user, key is never exposed.
 
 ### Policy Design
