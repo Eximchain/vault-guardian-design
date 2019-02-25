@@ -15,6 +15,7 @@ One angle here is to create a single plugin which handles everything: registerin
     - Authorized endpoint, only accessible when authenticated under the **Enduser** policy.
     - `create`: POST with the raw data you want signed, receive a signature using your key. 
         - *Optional*: Also respond with a `fresh_client_token` which clients can provide in a subsequent sign call, giving us a compromise between security (single-use token) and convenience (don't need to re-authenticate every time).
+        - *Optional*: Also include an `address_index` to instead sign with the non-zeroth address created by the key.
     - `read`: GET with no arguments, receive your public address.
 - `/guardian/authorize`
     - Authorized endpoint, only accessible when authenticated under the **Maintainer** policy.
