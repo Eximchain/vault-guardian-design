@@ -8,17 +8,33 @@ One angle here is to create a single plugin which handles everything: registerin
 
 ### Endpoints
 - `/guardian`
-    - Unauthorized endpoint, accessible by all, only implements `create`.
-    - POST with Okta username & password; receive a single-use `client_token` for signing with a secure key tied to your account.
+    - Unauthorized endpoint, accessible by all.
+    - `create`: POST with Okta username & password; receive a single-use `client_token` for signing with a secure key tied to your account.
     - Acts as an idempotent signup method.  If we don't have a record for that Okta user, it registers them, creates their key, and then logs them in.  If they've registered before, it just logs them in.  Either way, the response is a `client_token`.
 - `/guardian/sign`
-    - Authorized endpoint, only accessible when authenticated under the **Enduser** policy, only implements `create`.
-    - POST with the raw data you want signed, receive a signature using your key.
-    - *Optional*: Also respond with a `fresh_client_token` which clients can provide in a subsequent sign call, giving us a compromise between security (single-use token) and convenience (don't need to re-authenticate every time).
+    - Authorized endpoint, only accessible when authenticated under the **Enduser** policy.
+    - `create`: POST with the raw data you want signed, receive a signature using your key. 
+        - *Optional*: Also respond with a `fresh_client_token` which clients can provide in a subsequent sign call, giving us a compromise between security (single-use token) and convenience (don't need to re-authenticate every time).
+    - `read`: GET with no arguments, receive your public address.
 - `/guardian/authorize`
-    - Authorized endpoint, only accessible when authenticated under the **Maintainer** policy, only implements `create`.
-    - Call with a `SecretId` for the `guardian` AppRole, allowing the plugin to get a token for the rest of its lifetime. The `SecretId` should be single-use, it should produce tokens which can be used forever.
-    - Needs to be called by a root owner when the plugin process begins.  This may just be on startup, but potentially later if the plugin crashes.
+    - Authorized endpoint, only accessible when authenticated under the **Maintainer** policy.
+    - `create`: Call with a `SecretId` for the `guardian` AppRole, allowing the plugin to get a token for the rest of its lifetime. The `SecretId` should be single-use, it should produce tokens which can be used forever.
+    - Needs to be called when the plugin process begins.  This may just be on startup using the root token, but if the plugin crashes, will be using an identity which holds the **Maintainer** policy.
+
+### Very Rough Infrastructure Ideas
+- Vault Cluster
+- S3 bucket for vault backend
+- Load Balancer with Vault Cluster behind it
+    - Load Balancer accepts on port 443
+    - (Open Question: Do we need another server between? Worried about DDOS or Security?)
+- DNS name for Load Balancer
+- Amazon DDOS Protection?
+- Consul Cluster
+- Packer builds for vault and consul
+- SSH IP restrictions
+- Cloudwatch Alarm on cloudwatch metrics to alert maintainers
+- IAM role to Cloudwatch
+    - Plugin emits metric when cannot talk to vault
 
 ### Network Protocol
 A first time user's flow would look like:
@@ -43,7 +59,7 @@ This strategy requires three policies:
   - `/keys: ['read','create']`
 - **Enduser**
   - Regular policy for our registered endusers
-  - `/guardian/sign: ['create']`
+  - `/guardian/sign: ['create', 'read']`
 - **Maintainer**
   - Highly privileged policy for re-authorizing Guardian
   - `/auth/approle/role/guardian/secret-id: ['create']`
@@ -58,10 +74,20 @@ When Vault initializes with the root token, we need a setup script to mount engi
 3. Mount the Guardian plugin at `/guardian`
 4. Mount a secrets engine at `/keys`
 5. Register a trusted Okta username (Louis or Juan), give it the **Maintainer** policy.
+    - TODO: Actually, use an Okta group so the management is more straightforward.  Create it or make sure it exists.
 6. Create an AppRole named `guardian`, give it the **Guardian** policy.
 7. Update `guardian`'s RoleId to `guardian-role-id` -- hardcoding that value means we don't need to query it.
 8. Get a SecretId for `guardian`, pipe it into the `/guardian/authorize` command.
 9. Verify the plugin is operational by calling `/guardian` with new Okta credentials.  If the plugin is able to register the user and give you a `client_token`, its authorization is working.
+
+### Error Cases
+- `/guardian`
+    1. User fails to accept the push notification logging them in
+    2. User provides an email that isn't in the organization
+    3. Distinguish between account/key creation errors vs. login errors
+- `/guardian/sign`
+    1. Token has already been used
+    2. Missing sign data
 
 ## Regular Signing User Story
 
