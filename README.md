@@ -7,7 +7,7 @@ Software req'd to configure and use a Vault keystore behind Okta auth.  This is 
 One angle here is to create a single plugin which handles everything: registering users, creating keys, and signing with them.  
 
 ### Endpoints
-- `/guardian`
+- `/guardian/login`
     - Unauthorized endpoint, accessible by all.
     - `create`: POST with Okta username & password; receive a single-use `client_token` for signing with a secure key tied to your account.
     - Acts as an idempotent signup method.  If we don't have a record for that Okta user, it registers them, creates their key, and then logs them in.  If they've registered before, it just logs them in.  Either way, the response is a `client_token`.
@@ -42,7 +42,7 @@ A first time user's flow would look like:
 
 ![Guardian Network Protocol](protocol-diagram.jpg)
 
-1. User POSTs to the Vault plugin at `/guardian`, an unauthenticated endpoint, including their Okta username & password in the body.
+1. User POSTs to the Vault plugin at `/guardian/login`, an unauthenticated endpoint, including their Okta username & password in the body.
 2. Plugin GETs the user from the Okta API at [`/api/v1/users/:username`](https://developer.okta.com/docs/api/resources/users#get-user-with-login), verifying they really exist in our installation.  At this point, the plugin should also check to see if that user is already registered.
 3. Plugin registers user with core Vault by POSTing to [`/auth/okta/users/:username`](https://www.vaultproject.io/api/auth/okta/index.html#register-user).  They are automatically given the **Enduser** policy which gives them access to the `/guardian/sign` endpoint.
 4. Plugin creates a key for the user by POSTing to core Vault at [`/keys/:username`](https://www.vaultproject.io/api/secret/kv/kv-v1.html#create-update-secret).  Stores the mnemonic, HD_PATH, and raw file, just good measure.
@@ -80,10 +80,10 @@ When Vault initializes with the root token, we need a setup script to mount engi
 6. Create an AppRole named `guardian`, give it the **Guardian** policy.
 7. Update `guardian`'s RoleId to `guardian-role-id` -- hardcoding that value means we don't need to query it.
 8. Get a SecretId for `guardian`, pipe it into the `/guardian/authorize` command.
-9. Verify the plugin is operational by calling `/guardian` with new Okta credentials.  If the plugin is able to register the user and give you a `client_token`, its authorization is working.
+9. Verify the plugin is operational by calling `/guardian/login` with new Okta credentials.  If the plugin is able to register the user and give you a `client_token`, its authorization is working.
 
 ### Error Cases
-- `/guardian`
+- `/guardian/login`
     1. User fails to accept the push notification logging them in
     2. User provides an email that isn't in the organization
     3. Distinguish between account/key creation errors vs. login errors
