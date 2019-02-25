@@ -1,4 +1,4 @@
-# okta-vault
+# vault-guardian
 Software req'd to configure and use a Vault keystore behind Okta auth.  This is an integrated, batteries-included, authentication+authorization service for one `secp256k1` private key.
 
 > Principle: A minimal, clean API which keeps keys safe and lets consuming users sign with them.
