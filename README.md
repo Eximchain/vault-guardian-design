@@ -57,6 +57,7 @@ This strategy requires three policies:
 - **Guardian**
   - Privileged policy for the plugin to use
   - `/auth/okta/users/*: ['read','create']`
+  - `/auth/token/lookup: ['read']`
   - `/keys: ['read','create']`
 - **Enduser**
   - Regular policy for our registered endusers
@@ -66,7 +67,7 @@ This strategy requires three policies:
   - `/auth/approle/role/guardian/secret-id: ['create']`
   - `/guardian/authorize: ['create']`
 
-The lack of `'update'` permissions means the privileged policy will never overwrite anybody's keys.  They do not need to create new policies -- the sign path does not require a user argument, so the same policy can be given to all future users.
+The lack of `'update'` permissions means the privileged policy will never overwrite anybody's keys.  They do not need to create new policies -- the sign path does not require a user argument, so the same policy can be given to all future users.  The token lookup lets the plugin determine which the username corresponding to the client making the call.
 
 ### Initial Setup
 When Vault initializes with the root token, we need a setup script to mount engines, create policies, and assign them to identities.  Roughly, it will:

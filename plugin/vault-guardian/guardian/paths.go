@@ -82,6 +82,10 @@ func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *fra
 }
 
 func (b *backend) pathSign(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	client_token := req.ClientToken
+	username := GuardianClient.usernameFromToken(client_token)
+	keystore := GuardianClient.readKey(username)
+
 	return &logical.Response{
 		Data: map[string]interface{}{
 			"signature" : "TODO: Placeholder",
@@ -91,6 +95,7 @@ func (b *backend) pathSign(ctx context.Context, req *logical.Request, data *fram
 }
 
 func (b *backend) pathGetAddress(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	keystore := GuardianClient.readKeyFromToken(req.ClientToken)
 	return &logical.Response{
 		Data: map[string]interface{}{
 			"public_address" : "TODO: Placeholder"
@@ -99,9 +104,11 @@ func (b *backend) pathGetAddress(ctx context.Context, req *logical.Request, data
 }
 
 func (b *backend) pathAuthorize(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	secret_id := data.get("secret_id").(string)
+	success := GuardianClient.authorize(secret_id)
 	return &logical.Response{
 		Data: map[string]interface{}{
-			"success" : "TODO: Make a boolean"
+			"success" : success
 		}
 	}
 }
