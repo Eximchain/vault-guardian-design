@@ -75,20 +75,39 @@ func paths(b *backend) []*framework.Path {
 }
 
 func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	// Fetch login credentials
+	oktaUser := data.get("okta_username")
+	oktaPass := data.get("okta_password")
+
 	// Do we have an account for them?
-
-	// If not:
+	newUser := !GuardianClient.enduserExists(oktaUser)
+	if (newUser){
 		// Verify it's a real Okta account
-
-		// Register user with Okta auth engine
-
-		// Create & save key
+		if (GuardianClient.oktaAccountExists(oktaUser)){
+			pubAddress, createErr := GuardianClient.createEnduser(oktaUser)
+			if createErr != nil {
+				return nil, createErr
+			}
+		} else {
+			// Throw a useful error
+		}
+	}
 
 	// Perform the actual login call, get client_token
-	return &logical.Response{
-		Data: map[string]interface{}{
-			"client_token" : "TODO: Placeholder"
+	client_token := GuardianClient.loginEnduser(oktaUser, oktaPass)
+
+	if (newUser) {
+		respData := map[string]interface{}{
+			"client_token" : client_token,
+			"address"	   : pubAddress
 		}
+	} else {
+		respData := map[string]interface{}{
+			"client_token" : client_token
+		}
+	}
+	return &logical.Response{
+		Data: respData
 	}
 }
 
