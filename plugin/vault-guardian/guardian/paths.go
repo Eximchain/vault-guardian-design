@@ -18,62 +18,6 @@ import (
 	"github.com/hashicorp/vault/logical/framework"
 )
 
-func paths(b *backend) []*framework.Path {
-	return []*framework.Path{
-		&framework.Path{
-			Pattern: "login",
-			Fields: map[string]*framework.FieldSchema{
-				"okta_username": &framework.FieldSchema{
-					Type: framework.TypeString,
-					Description: "Username of Okta account to login, probably an email address."
-				},
-				"okta_password": &framework.FieldSchema{
-					Type: framework.TypeString,
-					Description: "Password for associated Okta account."
-				},
-			}
-			Callbacks: map[logical.Operation]framework.OperationFunc{
-				logical.CreateOperation: b.pathLogin
-			}
-		},
-		&framework.Path{
-			Pattern: "sign",
-			Fields: map[string]*framework.FieldSchema{
-				"raw_data": &framework.FieldSchema{
-					Type: framework.TypeString,
-					Description: "Raw hashed transaction data to sign, do not include the initial 0x."
-				},
-				"get_fresh_token": &framework.FieldSchema{
-					Type: framework.TypeBool,
-					Description: "Set true to also get a 'fresh_client_token' with your signed data, allowing one more call to sign.",
-					Default: false
-				},
-				"address_index": &framework.FieldSchema{
-					Type: framework.TypeInt,
-					Description: "Integer index of which generated address to use.",
-					Default: 0
-				}
-			}
-			Callbacks: map[logical.Operation]framework.OperationFunc{
-				logical.CreateOperation: b.pathSign,
-				logical.ReadOperation: b.pathGetAddress
-			}
-		},
-		&framework.Path{
-			Pattern: "authorize",
-			Fields: map[string]*framework.FieldSchema{
-				"secret_id": &framework.FieldSchema{
-					Type: framework.TypeString,
-					Description: "SecretID of the Guardian AppRole."
-				}
-			}
-			Callbacks: map[logical.Operation]framework.OperationFunc{
-				logical.CreateOperation: b.pathAuthorize
-			}
-		}
-	}
-}
-
 func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	// Fetch login credentials
 	oktaUser := data.get("okta_username")
@@ -113,13 +57,12 @@ func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *fra
 
 func (b *backend) pathSign(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	rawDataBytes  := hex.DecodeString(data.get("raw_data").(string))
-	privKeyHex 	  := GuardianClient.readKeyHexByToken(req.client_token)
+	privKeyHex 	  := GuardianClient.readKeyHexByToken(req.ClientToken)
 	sigBytes, err := SignWithHexKey(hash, privKeyHex)
 	sigHex := hex.EncodeToString(sigBytes)
 	return &logical.Response{
 		Data: map[string]interface{}{
-			"signature" : "0x"+sigHex,
-			"fresh_client_token" : "TODO: Placeholder"
+			"signature" : "0x"+sigHex
 		}
 	}
 }

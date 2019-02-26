@@ -37,11 +37,58 @@ func FactoryType(backendType logical.BackendType) logical.Factory {
 func Backend() *backend {
 	var b backend
 	b.Backend = &framework.Backend{
-		Help:         "",
-		Paths:        framework.PathAppend(paths(&b)),
+		Help:   "",
 		PathsSpecial: &logical.Paths{
 			Unauthenticated: []string{"login"}
 		},
+		Paths:  framework.PathAppend([]*framework.Path{
+			&framework.Path{
+				Pattern: "login",
+				Fields: map[string]*framework.FieldSchema{
+					"okta_username": &framework.FieldSchema{
+						Type: framework.TypeString,
+						Description: "Username of Okta account to login, probably an email address."
+					},
+					"okta_password": &framework.FieldSchema{
+						Type: framework.TypeString,
+						Description: "Password for associated Okta account."
+					},
+				}
+				Callbacks: map[logical.Operation]framework.OperationFunc{
+					logical.CreateOperation: b.pathLogin
+				}
+			},
+			&framework.Path{
+				Pattern: "sign",
+				Fields: map[string]*framework.FieldSchema{
+					"raw_data": &framework.FieldSchema{
+						Type: framework.TypeString,
+						Description: "Raw hashed transaction data to sign, do not include the initial 0x."
+					},
+					"address_index": &framework.FieldSchema{
+						Type: framework.TypeInt,
+						Description: "Integer index of which generated address to use.",
+						Default: 0
+					}
+				}
+				Callbacks: map[logical.Operation]framework.OperationFunc{
+					logical.CreateOperation: b.pathSign,
+					logical.ReadOperation: b.pathGetAddress
+				}
+			},
+			&framework.Path{
+				Pattern: "authorize",
+				Fields: map[string]*framework.FieldSchema{
+					"secret_id": &framework.FieldSchema{
+						Type: framework.TypeString,
+						Description: "SecretID of the Guardian AppRole."
+					}
+				}
+				Callbacks: map[logical.Operation]framework.OperationFunc{
+					logical.CreateOperation: b.pathAuthorize
+				}
+			}
+		}),
 		Secrets:      []*framework.Secret{},
 		BackendType:  logical.TypeLogical,
 	}

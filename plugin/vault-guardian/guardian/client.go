@@ -9,8 +9,15 @@ import (
 //  Core Struct Constructor
 //-----------------------------------------
 
+type GuardianConfig struct {
+	guardianToken: string
+	oktaOrg: string
+	oktaToken: string
+}
+
 type GuardianClient struct {
 	guardianToken: string
+	conf: GuardianConfig
 	vault: *api.Client
 	okta: *okta.Client
 }
