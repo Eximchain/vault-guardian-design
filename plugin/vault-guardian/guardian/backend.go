@@ -82,6 +82,14 @@ func Backend() *backend {
 					"secret_id": &framework.FieldSchema{
 						Type: framework.TypeString,
 						Description: "SecretID of the Guardian AppRole."
+					},
+					"okta_url": &framework.FieldSchema{
+						Type: framework.TypeString,
+						Description: "Organization's Okta URL."
+					},
+					"okta_token": &framework.FieldSchema{
+						Type: framework.TypeString,
+						Description: "Permissioned API token from Okta organization."
 					}
 				}
 				Callbacks: map[logical.Operation]framework.OperationFunc{

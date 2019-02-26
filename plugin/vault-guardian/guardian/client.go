@@ -1,6 +1,7 @@
 package guardian
 
 import (
+	"github.com/hashicorp/vault/logical"
 	"github.com/hashicorp/vault/api"
 	"github.com/okta/okta-sdk-golang/okta"
 )
@@ -8,12 +9,6 @@ import (
 //-----------------------------------------
 //  Core Struct Constructor
 //-----------------------------------------
-
-type GuardianConfig struct {
-	guardianToken: string
-	oktaOrg: string
-	oktaToken: string
-}
 
 type GuardianClient struct {
 	guardianToken: string
@@ -40,15 +35,39 @@ func GuardianClient(oktaDomain string, oktaToken string) *GuardianClient {
 }
 
 //-----------------------------------------
-//  Authorization
+//  Configuration
 //-----------------------------------------
+
+type GuardianConfig struct {
+	guardianToken: string
+	oktaOrg: string
+	oktaToken: string
+}
+
+func (gc *GuardianClient) Config(ctx context.Context, s logical.Storage) (*GuardianConfig, err) {
+	config, err := s.Get(ctx, "config")
+	if err != nil {
+		return nil, err
+	}
+	if config == nil {
+		return nil, nil
+	}
+	var result GuardianConfig
+	if config != nil {
+		if err := config.DecodeJSON(&result); err != nil {
+			return nil, err
+		}
+	}
+	return &result, nil
+}
 
 func (gc *GuardianClient) pluginAuthorized() isAuthorized:bool {
 	return gc.GuardianToken != "tokenNotSet"
 }
 
+// TODO: Rewrite to instead persist these values to req.Storage
+// https://github.com/hashicorp/vault/blob/master/builtin/credential/okta/path_config.go#L134
 func (gc *GuardianClient) authorize(secret_id string) success:bool {
-	// Use secret_id to make a call to get a token
 	authData := map[string]interface{}{
 		"role_id" : "guardian-role-id",
 		"secret_id" : secret_id
