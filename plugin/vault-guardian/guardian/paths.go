@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"path/filepath"
 	"strings"
+	"encoding/hex"
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
@@ -74,6 +75,16 @@ func paths(b *backend) []*framework.Path {
 }
 
 func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	// Do we have an account for them?
+
+	// If not:
+		// Verify it's a real Okta account
+
+		// Register user with Okta auth engine
+
+		// Create & save key
+
+	// Perform the actual login call, get client_token
 	return &logical.Response{
 		Data: map[string]interface{}{
 			"client_token" : "TODO: Placeholder"
@@ -82,23 +93,24 @@ func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *fra
 }
 
 func (b *backend) pathSign(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-	client_token := req.ClientToken
-	username := GuardianClient.usernameFromToken(client_token)
-	keystore := GuardianClient.readKey(username)
-
+	rawDataBytes  := hex.DecodeString(data.get("raw_data").(string))
+	privKeyHex 	  := GuardianClient.readKeyHexByToken(req.client_token)
+	sigBytes, err := SignWithHexKey(hash, privKeyHex)
+	sigHex := hex.EncodeToString(sigBytes)
 	return &logical.Response{
 		Data: map[string]interface{}{
-			"signature" : "TODO: Placeholder",
+			"signature" : "0x"+sigHex,
 			"fresh_client_token" : "TODO: Placeholder"
 		}
 	}
 }
 
 func (b *backend) pathGetAddress(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-	keystore := GuardianClient.readKeyFromToken(req.ClientToken)
+	privKeyHex := GuardianClient.readKeyHexByToken(req.ClientToken)
+	pubAddress := AddressFromHexKey(privKeyHex)
 	return &logical.Response{
 		Data: map[string]interface{}{
-			"public_address" : "TODO: Placeholder"
+			"public_address" : pubAddress
 		}
 	}
 }

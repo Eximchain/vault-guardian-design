@@ -46,6 +46,7 @@ func (gc *GuardianClient) authorize(secret_id string) success:bool {
         return fmt.Errorf("no auth info returned")
 	}
 	gc.client.SetToken(resp.Auth.ClientToken)
+	return true
 }
 
 func (gc *GuardianClient) oktaAccountExists(username string) exists:bool {
@@ -79,27 +80,25 @@ func (gc *GuardianClient) enduserExists(username string) username:string {
 }
 
 func (gc *GuardianClient) createKey(username string){
-	// Create JSONKeystore
-
-	// Send to the secrets engine
+	privKeyHex, publicAddressHex := CreateKey()
 	secretData := map[string]interface{}{
-		"keystore" : "TODO:"
-		"hd_path" : "TODO:"
+		"privKeyHex" : privKeyHex
+		"publicAddressHex" : publicAddressHex
 	}
 	resp, err := gc.vault.Logical().Create(fmt.Sprintf("/secrets/%s", username))
 	return resp
 }
 
-func (gc *GuardianClient) readKeyByUsername(username string){
+func (gc *GuardianClient) readKeyHexByUsername(username string){
 	resp, err := gc.vault.Logical().Read(fmt.Sprintf("/secrets/%s", username))
-	return resp
+	return resp.data.privKeyHex
 }
 
-func (gc *GuardianClient) readKeyByToken(client_token string) {
+func (gc *GuardianClient) readKeyHexByToken(client_token string) {
 	username := gc.usernameFromToken(client_token)
-	return gc.readKeyByUsername(username)
+	return gc.readKeyHexByUsername(username)
 }
 
-func (gc *GuardianClient) loginEnduser(username string, password string) client_token:string {
+func (gc *GuardianClient) loginEnduser(username string, password string) (client_token string) {
 
 }
