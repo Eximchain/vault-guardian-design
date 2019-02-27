@@ -107,6 +107,23 @@ type backend struct {
 	*framework.Backend
 }
 
+func (b *backend) Config(ctx context.Context, s logical.Storage) (*GuardianConfig, err) {
+	config, err := s.Get(ctx, "config")
+	if err != nil {
+		return nil, err
+	}
+	if config == nil {
+		return nil, nil
+	}
+	var result GuardianConfig
+	if config != nil {
+		if err := config.DecodeJSON(&result); err != nil {
+			return nil, err
+		}
+	}
+	return &result, nil
+}
+
 func (b *backend) pathExistenceCheck(ctx context.Context, req *logical.Request, data *framework.FieldData) (bool, error) {
 	out, err := req.Storage.Get(ctx, req.Path)
 	if err != nil {

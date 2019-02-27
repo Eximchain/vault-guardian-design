@@ -7,67 +7,48 @@ import (
 )
 
 //-----------------------------------------
-//  Core Struct Constructor
+//  Core Configuration
 //-----------------------------------------
 
 type GuardianClient struct {
-	guardianToken: string
-	conf: GuardianConfig
 	vault: *api.Client
 	okta: *okta.Client
 }
 
-func GuardianClient(oktaDomain string, oktaToken string) *GuardianClient {
+func GuardianClient(cfg GuardianConfig) *GuardianClient {
 	var gc GuardianClient
 
 	// Set up Vault client with default token
 	client, err = &api.NewClient()
+	client.SetToken(cfg.guardianToken)
 	gc.vault = client
-	gc.GuardianToken = "tokenNotSet"
 
 	// Set up Okta client
-	config := okta.NewConfig()
-		.WithOrgUrl(oktaDomain)
-		.WithToken(oktaToken)
-	oktaClient := okta.NewClient(config, nil, nil)
+	oktaConfig := okta.NewConfig()
+		.WithOrgUrl(cfg.oktaUrl)
+		.WithToken(cfg.oktaToken)
+	oktaClient := okta.NewClient(oktaConfig, nil, nil)
 	gc.okta = oktaClient
 	return &gc, nil
 }
 
-//-----------------------------------------
-//  Configuration
-//-----------------------------------------
-
 type GuardianConfig struct {
-	guardianToken: string
-	oktaOrg: string
-	oktaToken: string
+	guardianToken 	string	`json:guardian_token`
+	oktaUrl 		string	`json:okta_url`
+	oktaToken 		string	`json:okta_token`
 }
 
-func (gc *GuardianClient) Config(ctx context.Context, s logical.Storage) (*GuardianConfig, err) {
-	config, err := s.Get(ctx, "config")
-	if err != nil {
-		return nil, err
-	}
-	if config == nil {
-		return nil, nil
-	}
-	var result GuardianConfig
-	if config != nil {
-		if err := config.DecodeJSON(&result); err != nil {
-			return nil, err
-		}
-	}
-	return &result, nil
-}
+func (cfg *GuardianConfig) Client() (GuardianClient, err) { return GuardianClient(cfg) }
 
 func (gc *GuardianClient) pluginAuthorized() isAuthorized:bool {
-	return gc.GuardianToken != "tokenNotSet"
+	return gc.vault.Token() != ""
 }
 
-// TODO: Rewrite to instead persist these values to req.Storage
-// https://github.com/hashicorp/vault/blob/master/builtin/credential/okta/path_config.go#L134
-func (gc *GuardianClient) authorize(secret_id string) success:bool {
+//-----------------------------------------
+//  Token Operations
+//-----------------------------------------
+
+func (gc *GuardianClient) tokenFromSecretID(secret_id string) success:bool {
 	authData := map[string]interface{}{
 		"role_id" : "guardian-role-id",
 		"secret_id" : secret_id
@@ -79,13 +60,8 @@ func (gc *GuardianClient) authorize(secret_id string) success:bool {
     if resp.Auth == nil {
         return fmt.Errorf("no auth info returned")
 	}
-	gc.client.SetToken(resp.Auth.ClientToken)
-	return true
+	return resp.Auth.ClientToken;
 }
-
-//-----------------------------------------
-//  Token Parsing
-//-----------------------------------------
 
 func (gc *GuardianClient) usernameFromToken(client_token string) username:string {
 	resp, err := gc.vault.Logical().Write("/auth/token/lookup", map[string]interface{}{
