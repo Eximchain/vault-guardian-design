@@ -19,7 +19,6 @@ func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend,
 
 func Backend(c *logical.BackendConfig) *backend {
 	var b backend
-	fmt.Println("I AM THE BACKEND CONSTRUCTOR CAN YOU SEE ME ANYWHERE")
 	b.Backend = &framework.Backend{
 		Help:         "",
 		PathsSpecial: &logical.Paths{Unauthenticated: []string{"login"}},
@@ -93,14 +92,13 @@ func (b *backend) Config(ctx context.Context, s logical.Storage) (*Config, error
 	if err != nil {
 		return nil, err
 	}
-	if config == nil {
-		return nil, nil
-	}
 	var result Config
 	if config != nil {
 		if err := config.DecodeJSON(&result); err != nil {
 			return nil, err
 		}
+	} else {
+		result = Config{"", "", ""}
 	}
 	return &result, nil
 }

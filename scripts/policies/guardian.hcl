@@ -1,11 +1,15 @@
 path "auth/okta/users/*" {
-    capabilities = ["read", "create"]
+    capabilities = ["read", "create", "update"]
 }
 
 path "auth/token/lookup" {
-    capabilities = ["read"]
+    capabilities = ["read", "create", "update"]
 }
 
-path "keys" {
+path "identity/lookup/entity" {
+    capabilities = ["create","update"]
+}
+
+path "keys/*" {
     capabilities = ["read", "create"]
 }

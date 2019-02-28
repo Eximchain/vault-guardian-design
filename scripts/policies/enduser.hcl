@@ -1,3 +1,3 @@
 path "guardian/sign" {
-    capabilities = ["create"]
+    capabilities = ["create", "update", "read"]
 }

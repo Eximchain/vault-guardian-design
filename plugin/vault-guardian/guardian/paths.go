@@ -9,9 +9,24 @@ import (
 	"github.com/hashicorp/vault/logical/framework"
 )
 
-var configErrResp = logical.ErrorResponse("Error reading Config() from Storage")
-var clientErrResp = logical.ErrorResponse("Error building Client from Config")
-var tokenErrResp = logical.ErrorResponse("Failed to load key from token")
+func cleanErrResp(context string, err error) *logical.Response {
+	if err == nil {
+		return logical.ErrorResponse(context)
+	}
+	return logical.ErrorResponse(context + "\n\n" + err.Error())
+}
+
+func readConfigErrResp(err error) *logical.Response {
+	return cleanErrResp("Error reading Config() from Storage: ", err)
+}
+
+func makeClientErrResp(err error) *logical.Response {
+	return cleanErrResp("Error building Client from Config: ", err)
+}
+
+func keyFromTokenErrResp(err error) *logical.Response {
+	return cleanErrResp("Failed to load key from token: ", err)
+}
 
 func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	// Fetch login credentials
@@ -20,40 +35,40 @@ func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *fra
 
 	cfg, err := b.Config(ctx, req.Storage)
 	if err != nil {
-		return configErrResp, err
+		return readConfigErrResp(err), err
 	}
 	client, err := cfg.Client()
 	if err != nil {
-		return clientErrResp, err
+		return makeClientErrResp(err), err
 	}
 
 	// Do we have an account for them?
-	newUser, checkErr := client.enduserExists(oktaUser)
+	newUser, checkErr := client.isNewUser(oktaUser)
 	if checkErr != nil {
-		return nil, checkErr
+		return cleanErrResp(fmt.Sprintf("User check failed, here's conf: %#v", cfg), checkErr), checkErr
 	}
 	pubAddress := ""
 	if newUser {
 		// Verify it's a real Okta account
 		isOktaUser, oktaCheckErr := client.oktaAccountExists(oktaUser)
 		if oktaCheckErr != nil {
-			return nil, oktaCheckErr
+			return cleanErrResp("Failed to verify whether user's Okta account exists:", oktaCheckErr), oktaCheckErr
 		}
 		if isOktaUser {
 			var createErr error
 			pubAddress, createErr = client.createEnduser(oktaUser)
 			if createErr != nil {
-				return nil, createErr
+				return cleanErrResp("Error creating user and keys: ", createErr), createErr
 			}
 		} else {
-			// Throw a useful error
+			return cleanErrResp("Username does not belong to Guardian's Okta organization, not creating account.", nil), nil
 		}
 	}
 
 	// Perform the actual login call, get client_token
 	clientToken, loginErr := client.loginEnduser(oktaUser, oktaPass)
 	if loginErr != nil {
-		return logical.ErrorResponse("Unable to login with Okta using these credentials"), loginErr
+		return cleanErrResp("Unable to login with Okta with the provided credentials:", loginErr), loginErr
 	}
 
 	// This method is prototyped, commenting out while we get core flow working
@@ -71,53 +86,52 @@ func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *fra
 }
 
 func (b *backend) pathAuthorize(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-	fmt.Println("HELP HELP HELP FIND ME I'M RUNNING I'M REAL PLEASE HELP ME")
 	secretID, ok := data.GetOk("secret_id")
 	cfg, loadCfgErr := b.Config(ctx, req.Storage)
 	if loadCfgErr != nil {
-		return configErrResp, loadCfgErr
+		return readConfigErrResp(loadCfgErr), loadCfgErr
 	}
 	if ok {
 		client, makeClientErr := cfg.Client()
 		if makeClientErr != nil {
-			return clientErrResp, makeClientErr
+			return makeClientErrResp(makeClientErr), makeClientErr
 		}
 		guardianToken, tokenErr := client.tokenFromSecretID(secretID.(string))
 		if tokenErr != nil {
-			return logical.ErrorResponse("Error fetching token using SecretID"), tokenErr
+			return logical.ErrorResponse("Error fetching token using SecretID: " + tokenErr.Error()), tokenErr
 		}
-		cfg.guardianToken = guardianToken
+		cfg.GuardianToken = guardianToken
 	}
-	if cfg.guardianToken == "" {
+	if cfg.GuardianToken == "" {
 		return logical.ErrorResponse("secret_id was missing, could not get a guardianToken"), nil
 	}
 
 	oktaURL, ok := data.GetOk("okta_url")
 	if ok {
-		cfg.oktaURL = oktaURL.(string)
+		cfg.OktaURL = oktaURL.(string)
 	}
-	if cfg.oktaURL == "" {
+	if cfg.OktaURL == "" {
 		return logical.ErrorResponse("Must provide an okta_url"), nil
 	}
 
 	oktaToken, ok := data.GetOk("okta_token")
 	if ok {
-		cfg.oktaToken = oktaToken.(string)
+		cfg.OktaToken = oktaToken.(string)
 	}
-	if cfg.oktaToken == "" {
+	if cfg.OktaToken == "" {
 		return logical.ErrorResponse("Must provide an okta_token"), nil
 	}
 
 	jsonCfg, err := logical.StorageEntryJSON("config", cfg)
 	if err != nil {
-		return logical.ErrorResponse("Error making a StorageEntryJSON out of the config"), err
+		return logical.ErrorResponse("Error making a StorageEntryJSON out of the config: " + err.Error()), err
 	}
 	if err := req.Storage.Put(ctx, jsonCfg); err != nil {
-		return logical.ErrorResponse("Error saving the config StorageEntry"), err
+		return logical.ErrorResponse("Error saving the config StorageEntry: " + err.Error()), err
 	}
 
 	return &logical.Response{
-		Data: map[string]interface{}{"success": true},
+		Data: map[string]interface{}{"newConfig": cfg},
 	}, nil
 }
 
@@ -126,24 +140,25 @@ func (b *backend) pathSign(ctx context.Context, req *logical.Request, data *fram
 
 	rawDataBytes, decodeErr := hex.DecodeString(rawDataStr.(string))
 	if decodeErr != nil {
-		return logical.ErrorResponse("Unable to decode raw_data string from hex to bytes"), decodeErr
+		return logical.ErrorResponse("Unable to decode raw_data string from hex to bytes: " + decodeErr.Error()), decodeErr
 	}
 
 	cfg, loadCfgErr := b.Config(ctx, req.Storage)
 	if loadCfgErr != nil {
-		return configErrResp, loadCfgErr
+		return readConfigErrResp(loadCfgErr), loadCfgErr
 	}
 	client, makeClientErr := cfg.Client()
 	if makeClientErr != nil {
-		return clientErrResp, makeClientErr
+		return makeClientErrResp(makeClientErr), makeClientErr
 	}
-	privKeyHex, readKeyErr := client.readKeyHexByToken(req.ClientToken)
+
+	privKeyHex, readKeyErr := client.readKeyHexByEntityID(req.EntityID)
 	if readKeyErr != nil {
-		return tokenErrResp, readKeyErr
+		return keyFromTokenErrResp(readKeyErr), readKeyErr
 	}
 	sigBytes, err := SignWithHexKey(rawDataBytes, privKeyHex)
 	if err != nil {
-		return logical.ErrorResponse("Failed to unmarshall key & sign"), err
+		return logical.ErrorResponse("Failed to unmarshall key & sign: " + err.Error()), err
 	}
 	sigHex := hex.EncodeToString(sigBytes)
 	return &logical.Response{
@@ -154,19 +169,19 @@ func (b *backend) pathSign(ctx context.Context, req *logical.Request, data *fram
 func (b *backend) pathGetAddress(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	cfg, loadCfgErr := b.Config(ctx, req.Storage)
 	if loadCfgErr != nil {
-		return configErrResp, loadCfgErr
+		return readConfigErrResp(loadCfgErr), loadCfgErr
 	}
 	client, makeClientErr := cfg.Client()
 	if makeClientErr != nil {
-		return clientErrResp, makeClientErr
+		return makeClientErrResp(makeClientErr), makeClientErr
 	}
-	privKeyHex, readKeyErr := client.readKeyHexByToken(req.ClientToken)
+	privKeyHex, readKeyErr := client.readKeyHexByEntityID(req.EntityID)
 	if readKeyErr != nil {
-		return tokenErrResp, readKeyErr
+		return keyFromTokenErrResp(readKeyErr), readKeyErr
 	}
 	pubAddress, getAddressErr := AddressFromHexKey(privKeyHex)
 	if getAddressErr != nil {
-		return logical.ErrorResponse("Fail to derive address from private key"), getAddressErr
+		return logical.ErrorResponse("Fail to derive address from private key: " + getAddressErr.Error()), getAddressErr
 	}
 	return &logical.Response{
 		Data: map[string]interface{}{"public_address": pubAddress},
