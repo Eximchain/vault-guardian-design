@@ -1,7 +1,8 @@
 package guardian
 
 import (
-	"github.com/hashicorp/vault/logical"
+	"fmt"
+
 	"github.com/hashicorp/vault/api"
 	"github.com/okta/okta-sdk-golang/okta"
 )
@@ -10,37 +11,42 @@ import (
 //  Core Configuration
 //-----------------------------------------
 
-type GuardianClient struct {
-	vault: *api.Client
-	okta: *okta.Client
+//
+type Client struct {
+	vault *api.Client
+	okta  *okta.Client
 }
 
-func GuardianClient(cfg GuardianConfig) *GuardianClient {
-	var gc GuardianClient
+// ClientFromConfig : Constructor which takes a Config to produce a Client.
+func ClientFromConfig(cfg *Config) (*Client, error) {
+	var gc Client
 
 	// Set up Vault client with default token
-	client, err = &api.NewClient()
+	client, err := api.NewClient(api.DefaultConfig())
+	if err != nil {
+		return nil, err
+	}
 	client.SetToken(cfg.guardianToken)
 	gc.vault = client
 
 	// Set up Okta client
-	oktaConfig := okta.NewConfig()
-		.WithOrgUrl(cfg.oktaUrl)
-		.WithToken(cfg.oktaToken)
+	oktaConfig := okta.NewConfig().WithOrgUrl(cfg.oktaURL).WithToken(cfg.oktaToken)
 	oktaClient := okta.NewClient(oktaConfig, nil, nil)
 	gc.okta = oktaClient
 	return &gc, nil
 }
 
-type GuardianConfig struct {
-	guardianToken 	string	`json:guardian_token`
-	oktaUrl 		string	`json:okta_url`
-	oktaToken 		string	`json:okta_token`
+// Config : Required constants for running Guardian.  guardianToken must hold guardian policy.
+type Config struct {
+	guardianToken string `json:guardian_token`
+	oktaURL       string `json:okta_url`
+	oktaToken     string `json:okta_token`
 }
 
-func (cfg *GuardianConfig) Client() (GuardianClient, err) { return GuardianClient(cfg) }
+// Client : Call on a Config to get a configured Client.
+func (cfg *Config) Client() (*Client, error) { return ClientFromConfig(cfg) }
 
-func (gc *GuardianClient) pluginAuthorized() isAuthorized:bool {
+func (gc *Client) pluginAuthorized() (isAuthorized bool) {
 	return gc.vault.Token() != ""
 }
 
@@ -48,86 +54,108 @@ func (gc *GuardianClient) pluginAuthorized() isAuthorized:bool {
 //  Token Operations
 //-----------------------------------------
 
-func (gc *GuardianClient) tokenFromSecretID(secret_id string) success:bool {
+func (gc *Client) tokenFromSecretID(secretID string) (clientToken string, err error) {
 	authData := map[string]interface{}{
-		"role_id" : "guardian-role-id",
-		"secret_id" : secret_id
+		"role_id":   "guardian-role-id",
+		"secret_id": secretID,
 	}
 	resp, err := gc.vault.Logical().Write("auth/approle/login", authData)
 	if err != nil {
-        return err
-    }
-    if resp.Auth == nil {
-        return fmt.Errorf("no auth info returned")
+		return "", err
 	}
-	return resp.Auth.ClientToken;
+	if resp.Auth == nil {
+		return "", fmt.Errorf("no auth info returned")
+	}
+	return resp.Auth.ClientToken, nil
 }
 
-func (gc *GuardianClient) usernameFromToken(client_token string) username:string {
+type TokenLookupMetadata struct {
+	username string
+}
+
+func (gc *Client) usernameFromToken(clientToken string) (username string, err error) {
 	resp, err := gc.vault.Logical().Write("/auth/token/lookup", map[string]interface{}{
-		"token" : client_token
+		"token": clientToken,
 	})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	// TODO: How does this look in errors?  Is Write the correct method?
-	return resp.Data.meta.username
+	tokenMetadata := resp.Data["meta"].(TokenLookupMetadata)
+	return tokenMetadata.username, nil
 }
 
-func (gc *GuardianClient) readKeyHexByToken(client_token string) privKeyHex string {
-	username := gc.usernameFromToken(client_token)
-	resp, err := gc.vault.Logical().Read(fmt.Sprintf("/secrets/%s", username))
-	if err != nil {
-		return nil, err
+func (gc *Client) readKeyHexByToken(clientToken string) (privKeyHex string, err error) {
+	username, usernameErr := gc.usernameFromToken(clientToken)
+	if usernameErr != nil {
+		return "", usernameErr
 	}
-	return resp.data.privKeyHex
+	resp, err := gc.vault.Logical().Read(fmt.Sprintf("/keys/%s", username))
+	if err != nil {
+		return "", err
+	}
+	return resp.Data["privKeyHex"].(string), nil
+}
+
+func (gc *Client) makeSingleSignToken(username string) (clientToken string, err error) {
+	tokenArg := map[string]interface{}{
+		"policies": []string{"enduser"},
+		"num_uses": 1,
+		"metadata": map[string]string{"username": username}}
+	tokenResp, err := gc.vault.Logical().Write("/auth/token/create/guardian-enduser", tokenArg)
+	if err != nil {
+		return "", err
+	}
+	return tokenResp.Auth.ClientToken, nil
 }
 
 //-----------------------------------------
 //  User Management
 //-----------------------------------------
 
-func (gc *GuardianClient) loginEnduser(username string, password string) (client_token string) {
-	emptyClient, makeClientErr := &api.NewClient()
+func (gc *Client) loginEnduser(username string, password string) (clientToken string, err error) {
+	defaultConf := api.DefaultConfig()
+	emptyClient, makeClientErr := api.NewClient(defaultConf)
 	if makeClientErr != nil {
-		return nil, makeClientErr
+		return "", makeClientErr
 	}
-	loginResp, loginErr := emptyClient.Logical().Write(fmt.Sprintf("auth/okta/login/%s",username), map[string]interface{}{
-		"password" : password
+	loginResp, loginErr := emptyClient.Logical().Write(fmt.Sprintf("auth/okta/login/%s", username), map[string]interface{}{
+		"password": password,
 	})
 	if loginErr != nil {
-		return nil, loginErr
+		return "", loginErr
 	}
-	return loginResp.Auth.client_token
+	return loginResp.Auth.ClientToken, nil
 }
 
-func (gc *GuardianClient) enduserExists(username string) username:string {
+func (gc *Client) enduserExists(username string) (exists bool, err error) {
 	resp, err := gc.vault.Logical().Read(fmt.Sprintf("/auth/okta/users/%s", username))
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	// Determine what above looks like when no account is registered
-	return resp
+	return resp != nil, nil
 }
 
-func (gc *GuardianClient) createEnduser(username string) publicAddressHex string, err error {
+func (gc *Client) createEnduser(username string) (publicAddressHex string, err error) {
 	createData := map[string]interface{}{
 		"username": username,
-		"policies": [],
-		"groups": ["guardian-enduser"]
-	}
-	userResp, userErr := gc.vault.Logical().Write(fmt.Sprintf("/auth/okta/users/%s", username), createData)
+		"policies": []string{},
+		"groups":   []string{"guardian-enduser"}}
+	_, userErr := gc.vault.Logical().Write(fmt.Sprintf("/auth/okta/users/%s", username), createData)
 	if userErr != nil {
-		return nil, userErr
+		return "", userErr
 	}
-	privKeyHex, publicAddressHex := CreateKey()
+	privKeyHex, publicAddressHex, createKeyErr := CreateKey()
+	if createKeyErr != nil {
+		return "", createKeyErr
+	}
 	secretData := map[string]interface{}{
-		"privKeyHex" : privKeyHex
-		"publicAddressHex" : publicAddressHex
-	}
-	keyResp, keyErr := gc.vault.Logical().Create(fmt.Sprintf("/secrets/%s", username))
+		"privKeyHex":       privKeyHex,
+		"publicAddressHex": publicAddressHex}
+	_, keyErr := gc.vault.Logical().Write(fmt.Sprintf("/keys/%s", username), secretData)
 	if keyErr != nil {
-		return nil, keyErr
+		return "", keyErr
 	}
 	return publicAddressHex, nil
 }
@@ -136,8 +164,11 @@ func (gc *GuardianClient) createEnduser(username string) publicAddressHex string
 //  Okta Calls
 //-----------------------------------------
 
-func (gc *GuardianClient) oktaAccountExists(username string) exists:bool {
+func (gc *Client) oktaAccountExists(username string) (exists bool, err error) {
 	// Determine what the response looks like for non-existent users
-	user, resp, err := gc.okta.User.GetUser(username, nil)
-	return user != nil
+	user, _, err := gc.okta.User.GetUser(username, nil)
+	if err != nil {
+		return false, err
+	}
+	return user != nil, nil
 }
