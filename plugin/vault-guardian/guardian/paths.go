@@ -3,6 +3,7 @@ package guardian
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 
 	"github.com/hashicorp/vault/logical"
 	"github.com/hashicorp/vault/logical/framework"
@@ -70,6 +71,7 @@ func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *fra
 }
 
 func (b *backend) pathAuthorize(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	fmt.Println("HELP HELP HELP FIND ME I'M RUNNING I'M REAL PLEASE HELP ME")
 	secretID, ok := data.GetOk("secret_id")
 	cfg, loadCfgErr := b.Config(ctx, req.Storage)
 	if loadCfgErr != nil {

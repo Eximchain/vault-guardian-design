@@ -8,12 +8,6 @@ import (
 	"github.com/hashicorp/vault/logical/framework"
 )
 
-// New returns a new backend as an interface. This func
-// is only necessary for builtin backend plugins.
-func New() (interface{}, error) {
-	return Backend(), nil
-}
-
 // Factory returns a new backend as logical.Backend.
 func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend, error) {
 	b := Backend()
@@ -36,6 +30,7 @@ func FactoryType(backendType logical.BackendType) logical.Factory {
 
 func Backend() *backend {
 	var b backend
+	fmt.Println("I AM THE BACKEND CONSTRUCTOR CAN YOU SEE ME ANYWHERE")
 	b.Backend = &framework.Backend{
 		Help:         "",
 		PathsSpecial: &logical.Paths{Unauthenticated: []string{"login"}},
@@ -95,7 +90,6 @@ func Backend() *backend {
 				},
 			},
 		}),
-		Secrets:     []*framework.Secret{},
 		BackendType: logical.TypeLogical,
 	}
 	return &b
