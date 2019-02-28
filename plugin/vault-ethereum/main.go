@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/eximchain/vault-ethereum/ethereum"
+	"github.com/eximchain/vault-guardian/plugin/vault-ethereum/ethereum"
 	"github.com/hashicorp/vault/helper/pluginutil"
 	"github.com/hashicorp/vault/logical"
 	"github.com/hashicorp/vault/logical/plugin"

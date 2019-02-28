@@ -6,7 +6,6 @@ import (
 
 	"github.com/eximchain/vault-guardian/plugin/vault-guardian/guardian"
 	"github.com/hashicorp/vault/helper/pluginutil"
-	"github.com/hashicorp/vault/logical"
 	"github.com/hashicorp/vault/logical/plugin"
 )
 
@@ -18,13 +17,11 @@ func main() {
 	tlsConfig := apiClientMeta.GetTLSConfig()
 	tlsProviderFunc := pluginutil.VaultPluginTLSProvider(tlsConfig)
 
-	factoryFunc := guardian.FactoryType(logical.TypeLogical)
 	err := plugin.Serve(&plugin.ServeOpts{
-		BackendFactoryFunc: factoryFunc,
+		BackendFactoryFunc: guardian.Factory,
 		TLSProviderFunc:    tlsProviderFunc,
 	})
 	if err != nil {
-		log.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 }

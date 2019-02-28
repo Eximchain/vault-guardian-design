@@ -10,25 +10,14 @@ import (
 
 // Factory returns a new backend as logical.Backend.
 func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend, error) {
-	b := Backend()
+	b := Backend(conf)
 	if err := b.Setup(ctx, conf); err != nil {
 		return nil, err
 	}
 	return b, nil
 }
 
-func FactoryType(backendType logical.BackendType) logical.Factory {
-	return func(ctx context.Context, conf *logical.BackendConfig) (logical.Backend, error) {
-		b := Backend()
-		b.BackendType = backendType
-		if err := b.Setup(ctx, conf); err != nil {
-			return nil, err
-		}
-		return b, nil
-	}
-}
-
-func Backend() *backend {
+func Backend(c *logical.BackendConfig) *backend {
 	var b backend
 	fmt.Println("I AM THE BACKEND CONSTRUCTOR CAN YOU SEE ME ANYWHERE")
 	b.Backend = &framework.Backend{
