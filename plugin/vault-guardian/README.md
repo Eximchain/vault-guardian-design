@@ -20,6 +20,12 @@ The setup script completely configures the Guardian.  It expects to be called fr
 $ [~/vault-guardian/scripts] . setup-guardian.sh
 ```
 
+If you get errors about getting HTTP responses for an HTTPS client, make sure to set:
+
+```bash
+$ export VAULT_ADDR=http://127.0.0.1:8200
+```
+
 ### Enduser Flow
 With that done, regular usage is dead simple.  The folder you run this from does not matter.
 
