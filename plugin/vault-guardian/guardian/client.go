@@ -55,61 +55,6 @@ func (gc *Client) pluginAuthorized() (isAuthorized bool) {
 }
 
 //-----------------------------------------
-//  Token Operations
-//-----------------------------------------
-
-func (gc *Client) tokenFromSecretID(secretID string) (clientToken string, err error) {
-	authData := map[string]interface{}{
-		"role_id":   "guardian-role-id",
-		"secret_id": secretID,
-	}
-	resp, err := gc.vault.Logical().Write("/auth/approle/login", authData)
-	if err != nil {
-		return "", err
-	}
-	if resp.Auth == nil {
-		return "", fmt.Errorf("no auth info returned")
-	}
-	return resp.Auth.ClientToken, nil
-}
-
-func (gc *Client) usernameFromEntityID(EntityID string) (username string, err error) {
-	resp, err := gc.vault.Logical().Write("/identity/lookup/entity", map[string]interface{}{
-		"id": EntityID,
-	})
-	if err != nil {
-		return "", err
-	}
-	aliases := resp.Data["aliases"].([]interface{})
-	alias := aliases[0].(map[string]interface{})
-	return alias["name"].(string), nil
-}
-
-func (gc *Client) readKeyHexByEntityID(EntityID string) (privKeyHex string, err error) {
-	username, usernameErr := gc.usernameFromEntityID(EntityID)
-	if usernameErr != nil {
-		return "", usernameErr
-	}
-	resp, err := gc.vault.Logical().Read(fmt.Sprintf("/keys/%s", username))
-	if err != nil {
-		return "", err
-	}
-	return resp.Data["privKeyHex"].(string), nil
-}
-
-func (gc *Client) makeSingleSignToken(username string) (clientToken string, err error) {
-	tokenArg := map[string]interface{}{
-		"policies": []string{"enduser"},
-		"num_uses": 1,
-		"metadata": map[string]string{"username": username}}
-	tokenResp, err := gc.vault.Logical().Write("/auth/token/create/guardian-enduser", tokenArg)
-	if err != nil {
-		return "", err
-	}
-	return tokenResp.Auth.ClientToken, nil
-}
-
-//-----------------------------------------
 //  User Management
 //-----------------------------------------
 
@@ -151,6 +96,65 @@ func (gc *Client) createEnduser(username string) (publicAddressHex string, err e
 		return "", keyErr
 	}
 	return publicAddressHex, nil
+}
+
+//-----------------------------------------
+//  EntityID Operations
+//-----------------------------------------
+
+func (gc *Client) usernameFromEntityID(EntityID string) (username string, err error) {
+	resp, err := gc.vault.Logical().Write("/identity/lookup/entity", map[string]interface{}{
+		"id": EntityID,
+	})
+	if err != nil {
+		return "", err
+	}
+	aliases := resp.Data["aliases"].([]interface{})
+	alias := aliases[0].(map[string]interface{})
+	return alias["name"].(string), nil
+}
+
+func (gc *Client) readKeyHexByEntityID(EntityID string) (privKeyHex string, err error) {
+	username, usernameErr := gc.usernameFromEntityID(EntityID)
+	if usernameErr != nil {
+		return "", usernameErr
+	}
+	resp, err := gc.vault.Logical().Read(fmt.Sprintf("/keys/%s", username))
+	if err != nil {
+		return "", err
+	}
+	return resp.Data["privKeyHex"].(string), nil
+}
+
+//-----------------------------------------
+//  Token Operations
+//-----------------------------------------
+
+func (gc *Client) tokenFromSecretID(secretID string) (clientToken string, err error) {
+	authData := map[string]interface{}{
+		"role_id":   "guardian-role-id",
+		"secret_id": secretID,
+	}
+	resp, err := gc.vault.Logical().Write("/auth/approle/login", authData)
+	if err != nil {
+		return "", err
+	}
+	if resp.Auth == nil {
+		return "", fmt.Errorf("no auth info returned")
+	}
+	return resp.Auth.ClientToken, nil
+}
+
+func (gc *Client) makeSingleSignToken(username string) (clientToken string, err error) {
+	tokenArg := map[string]interface{}{
+		"policies": []string{"enduser"},
+		"num_uses": 1,
+		"metadata": map[string]string{"username": username}}
+	tokenResp, err := gc.vault.Logical().Write("/auth/token/create/guardian-enduser", tokenArg)
+	if err != nil {
+		return "", err
+	}
+	return tokenResp.Auth.ClientToken, nil
 }
 
 //-----------------------------------------
